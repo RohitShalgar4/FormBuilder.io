@@ -50,16 +50,16 @@ const FormEditor = ({ form, setForm }) => {
         return {
           categories: ['Category 1', 'Category 2'],
           items: ['Item 1', 'Item 2', 'Item 3', 'Item 4'],
-          correctAnswers: {},
-          itemScores: {},
+          correctAnswers: { 0: 0, 1: 0, 2: 1, 3: 1 }, // Default: first 2 items in Category 1, last 2 in Category 2
+          itemScores: { 0: 1, 1: 1, 2: 1, 3: 1 }, // Default: 1 point per item
           maxScore: 4
         }
       case 'cloze':
         return {
           text: 'The quick [brown] fox jumps over the [lazy] dog.',
           blanks: ['brown', 'lazy'],
-          correctAnswers: {},
-          blankScores: {},
+          correctAnswers: { 0: 'brown', 1: 'lazy' }, // Default correct answers
+          blankScores: { 0: 1, 1: 1 }, // Default: 1 point per blank
           maxScore: 2
         }
       case 'comprehension':

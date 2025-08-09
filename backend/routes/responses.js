@@ -20,6 +20,8 @@ router.post('/', async (req, res) => {
     // Calculate score
     const { score, maxScore } = await calculateScore(req.body.formId, req.body.answers);
     
+    console.log('💾 Saving public response with score:', score, 'maxScore:', maxScore);
+    
     const response = new Response({
       ...req.body,
       score,
@@ -28,7 +30,7 @@ router.post('/', async (req, res) => {
       userAgent: req.get('User-Agent')
     });
     const savedResponse = await response.save();
-    console.log('✅ Public response saved:', savedResponse._id, 'Score:', score, '/', maxScore);
+    console.log('✅ Public response saved:', savedResponse._id, 'Score:', savedResponse.score, '/', savedResponse.maxScore);
     res.status(201).json(savedResponse);
   } catch (error) {
     console.error('❌ Public response submission error:', error);
@@ -52,6 +54,8 @@ router.post('/authenticated', authenticateToken, async (req, res) => {
     // Calculate score
     const { score, maxScore } = await calculateScore(req.body.formId, req.body.answers);
     
+    console.log('💾 Saving response with score:', score, 'maxScore:', maxScore);
+    
     const response = new Response({
       ...req.body,
       userId: req.user._id,
@@ -61,7 +65,7 @@ router.post('/authenticated', authenticateToken, async (req, res) => {
       userAgent: req.get('User-Agent')
     });
     const savedResponse = await response.save();
-    console.log('✅ Authenticated response saved:', savedResponse._id, 'for user:', req.user._id, req.user.name, 'Score:', score, '/', maxScore);
+    console.log('✅ Authenticated response saved:', savedResponse._id, 'for user:', req.user._id, req.user.name, 'Score:', savedResponse.score, '/', savedResponse.maxScore);
     res.status(201).json(savedResponse);
   } catch (error) {
     console.error('❌ Authenticated response submission error:', error);
@@ -69,81 +73,169 @@ router.post('/authenticated', authenticateToken, async (req, res) => {
   }
 });
 
+// Helper function to validate and sanitize answers
+const validateAnswers = (answers) => {
+  if (!Array.isArray(answers)) {
+    console.log('⚠️ Answers is not an array, converting to empty array');
+    return [];
+  }
+  return answers.filter(answer => 
+    answer && 
+    typeof answer === 'object' && 
+    answer.questionId && 
+    answer.questionType && 
+    answer.answer !== undefined
+  );
+};
+
 // Helper function to calculate score
 const calculateScore = async (formId, answers) => {
   try {
+    console.log('🔍 Calculating score for form:', formId);
+    console.log('📝 User answers:', JSON.stringify(answers, null, 2));
+    
+    // Validate and sanitize answers
+    const validAnswers = validateAnswers(answers);
+    console.log('✅ Valid answers:', validAnswers.length);
+    
     const form = await Form.findById(formId);
     if (!form) {
+      console.log('❌ Form not found');
       return { score: 0, maxScore: 0 };
     }
+    
+    console.log('📋 Form questions:', form.questions.length);
+    form.questions.forEach((q, index) => {
+      console.log(`  Q${index + 1}: ${q.title} (${q.type})`);
+      if (q.settings) {
+        console.log(`    Settings:`, JSON.stringify(q.settings, null, 2));
+      }
+    });
 
     let totalScore = 0;
     let totalMaxScore = 0;
 
-    form.questions.forEach(question => {
-      const questionAnswer = answers.find(a => a.questionId === question.id);
+    form.questions.forEach((question, questionIndex) => {
+      console.log(`\n📋 Processing question ${questionIndex + 1}: ${question.title} (${question.type})`);
+      
+      const questionAnswer = validAnswers.find(a => a.questionId === question.id);
+      console.log('📝 Question answer:', questionAnswer ? JSON.stringify(questionAnswer.answer, null, 2) : 'No answer');
       
       if (question.type === 'comprehension' && question.settings?.questions) {
+        console.log('📖 Processing comprehension question');
         if (questionAnswer && questionAnswer.answer) {
           question.settings.questions.forEach((q, qIndex) => {
             const userAnswer = questionAnswer.answer[qIndex];
             const questionScore = q.score || 1;
             
-            if (userAnswer === q.correctAnswer) {
+            console.log(`  Q${qIndex + 1}: User answered ${userAnswer}, correct is ${q.correctAnswer}, score: ${questionScore}`);
+            
+            if (userAnswer !== undefined && q.correctAnswer !== undefined && userAnswer === q.correctAnswer) {
               totalScore += questionScore;
+              console.log(`  ✅ Correct! Added ${questionScore} points`);
+            } else if (userAnswer !== undefined && q.correctAnswer !== undefined) {
+              console.log(`  ❌ Incorrect`);
+            } else {
+              console.log(`  ⚠️ Missing data - user: ${userAnswer}, correct: ${q.correctAnswer}`);
             }
             totalMaxScore += questionScore;
           });
         } else {
           // Add max score for unanswered questions
           question.settings.questions.forEach(q => {
-            totalMaxScore += q.score || 1;
+            const questionScore = q.score || 1;
+            totalMaxScore += questionScore;
+            console.log(`  ⚠️ Unanswered question, max score: ${questionScore}`);
           });
         }
       } else if (question.type === 'categorize' && question.settings?.correctAnswers) {
+        console.log('📂 Processing categorize question');
+        console.log('📋 Correct answers:', JSON.stringify(question.settings.correctAnswers, null, 2));
+        
         if (questionAnswer && questionAnswer.answer) {
+          // Convert the answer format from {categoryName: [items]} to {itemIndex: categoryIndex}
+          const itemToCategoryMap = {};
+          
+          // Build a map of which category each item belongs to
+          Object.entries(questionAnswer.answer).forEach(([categoryName, items]) => {
+            if (Array.isArray(items)) {
+              items.forEach(item => {
+                const itemIndex = question.settings.items.indexOf(item);
+                const categoryIndex = question.settings.categories.indexOf(categoryName);
+                if (itemIndex !== -1 && categoryIndex !== -1) {
+                  itemToCategoryMap[itemIndex] = categoryIndex;
+                }
+              });
+            }
+          });
+          
+          console.log('🗺️ Item to category map:', itemToCategoryMap);
+          
           question.settings.items.forEach((item, itemIndex) => {
-            const userCategory = questionAnswer.answer[itemIndex];
-            const correctCategory = question.settings.correctAnswers[itemIndex];
+            const userCategoryIndex = itemToCategoryMap[itemIndex];
+            const correctCategoryIndex = question.settings.correctAnswers[itemIndex];
             const itemScore = question.settings.itemScores?.[itemIndex] || 1;
             
-            if (userCategory === correctCategory) {
+            console.log(`  Item "${item}": User put in category ${userCategoryIndex}, correct is ${correctCategoryIndex}, score: ${itemScore}`);
+            
+            // Only score if we have both user answer and correct answer
+            if (userCategoryIndex !== undefined && correctCategoryIndex !== undefined && userCategoryIndex === correctCategoryIndex) {
               totalScore += itemScore;
+              console.log(`  ✅ Correct! Added ${itemScore} points`);
+            } else if (userCategoryIndex !== undefined && correctCategoryIndex !== undefined) {
+              console.log(`  ❌ Incorrect`);
+            } else {
+              console.log(`  ⚠️ Missing data - user: ${userCategoryIndex}, correct: ${correctCategoryIndex}`);
             }
             totalMaxScore += itemScore;
           });
         } else {
           // Add max score for unanswered questions
           question.settings.items.forEach((item, itemIndex) => {
-            totalMaxScore += question.settings.itemScores?.[itemIndex] || 1;
+            const itemScore = question.settings.itemScores?.[itemIndex] || 1;
+            totalMaxScore += itemScore;
+            console.log(`  ⚠️ Unanswered item "${item}", max score: ${itemScore}`);
           });
         }
       } else if (question.type === 'cloze' && question.settings?.correctAnswers) {
+        console.log('🔤 Processing cloze question');
+        console.log('📋 Correct answers:', JSON.stringify(question.settings.correctAnswers, null, 2));
+        
         if (questionAnswer && questionAnswer.answer) {
           question.settings.blanks.forEach((blank, blankIndex) => {
             const userAnswer = questionAnswer.answer[blankIndex];
             const correctAnswer = question.settings.correctAnswers[blankIndex];
             const blankScore = question.settings.blankScores?.[blankIndex] || 1;
             
+            console.log(`  Blank ${blankIndex + 1}: User answered "${userAnswer}", correct is "${correctAnswer}", score: ${blankScore}`);
+            
             // Case-insensitive comparison for cloze answers
             if (userAnswer && correctAnswer && 
                 userAnswer.toLowerCase().trim() === correctAnswer.toLowerCase().trim()) {
               totalScore += blankScore;
+              console.log(`  ✅ Correct! Added ${blankScore} points`);
+            } else if (userAnswer && correctAnswer) {
+              console.log(`  ❌ Incorrect`);
+            } else {
+              console.log(`  ⚠️ Missing data - user: "${userAnswer}", correct: "${correctAnswer}"`);
             }
             totalMaxScore += blankScore;
           });
         } else {
           // Add max score for unanswered questions
           question.settings.blanks.forEach((blank, blankIndex) => {
-            totalMaxScore += question.settings.blankScores?.[blankIndex] || 1;
+            const blankScore = question.settings.blankScores?.[blankIndex] || 1;
+            totalMaxScore += blankScore;
+            console.log(`  ⚠️ Unanswered blank ${blankIndex + 1}, max score: ${blankScore}`);
           });
         }
       }
     });
 
+    console.log(`\n📊 Final score: ${totalScore}/${totalMaxScore} (${totalMaxScore > 0 ? Math.round((totalScore / totalMaxScore) * 100) : 0}%)`);
     return { score: totalScore, maxScore: totalMaxScore };
   } catch (error) {
-    console.error('Error calculating score:', error);
+    console.error('❌ Error calculating score:', error);
     return { score: 0, maxScore: 0 };
   }
 };
@@ -427,6 +519,28 @@ router.get('/export-single/:responseId', authenticateToken, requireAdmin, async 
   }
 });
 
+// Test scoring endpoint (admin only) - for debugging
+router.post('/test-scoring', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { formId, answers } = req.body;
+    console.log('🧪 Testing scoring for form:', formId);
+    console.log('📝 Test answers:', JSON.stringify(answers, null, 2));
+    
+    const result = await calculateScore(formId, answers);
+    console.log('📊 Test scoring result:', result);
+    
+    res.json({
+      message: 'Scoring test completed',
+      result,
+      formId,
+      answers
+    });
+  } catch (error) {
+    console.error('❌ Test scoring error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get single response by ID (admin only) - must be last to avoid conflicts
 router.get('/:responseId', authenticateToken, requireAdmin, async (req, res) => {
   try {
@@ -451,7 +565,9 @@ router.get('/:responseId', authenticateToken, requireAdmin, async (req, res) => 
       userId: response.userId?._id || 'null',
       userName: response.userId?.name || 'Anonymous',
       userEmail: response.userId?.email || 'Anonymous',
-      submittedAt: response.submittedAt
+      submittedAt: response.submittedAt,
+      score: response.score,
+      maxScore: response.maxScore
     });
     
     res.json(response);

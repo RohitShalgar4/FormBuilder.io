@@ -86,9 +86,12 @@ const FormFill = () => {
         })
       }
       
+      console.log('📤 Submitting form data:', JSON.stringify(responseData, null, 2));
+      
       // Use authenticated route if user is logged in, otherwise use public route
       const endpoint = user ? '/api/responses/authenticated' : '/api/responses'
-      await axios.post(endpoint, responseData)
+      const response = await axios.post(endpoint, responseData)
+      console.log('📥 Response received:', response.data);
       setSubmitted(true)
       toast.success('Form submitted successfully!')
     } catch (error) {
