@@ -19,15 +19,18 @@ import FormFill from './pages/FormFill'
 import FormResponses from './pages/FormResponses'
 import ResponseDetails from './pages/ResponseDetails'
 import NotFound from './components/NotFound'
+import ErrorBoundary from './components/ErrorBoundary'
+import TestPage from './pages/TestPage'
 
 function App() {
   return (
-    <AuthProvider>
-      <DndProvider backend={HTML5Backend}>
-        <Router>
-          <div className="App">
-            <Toaster position="top-right" />
-            <Routes>
+    <ErrorBoundary>
+      <AuthProvider>
+        <DndProvider backend={HTML5Backend}>
+          <Router>
+            <div className="App">
+              <Toaster position="top-right" />
+              <Routes>
               {/* Public routes */}
               <Route path="/login" element={
                 <ProtectedRoute requireAuth={false}>
@@ -44,6 +47,9 @@ function App() {
               <Route path="/form/formid/:formId" element={<FormFill />} />
               {/* Catch-all route for any other form patterns */}
               <Route path="/form/*" element={<FormFill />} />
+              
+              {/* Test route */}
+              <Route path="/test/:param?" element={<TestPage />} />
 
               {/* Protected routes - Role-based routing */}
               <Route path="/" element={
@@ -93,6 +99,7 @@ function App() {
         </Router>
       </DndProvider>
     </AuthProvider>
+    </ErrorBoundary>
   )
 }
 

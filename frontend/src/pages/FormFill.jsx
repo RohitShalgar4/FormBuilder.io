@@ -30,6 +30,8 @@ const FormFill = () => {
   const fetchForm = async () => {
     try {
       console.log('🔍 Fetching form with params:', { shareId, formId, actualFormId, catchAll })
+      console.log('🌐 Current URL:', window.location.href)
+      console.log('🔗 API Base URL:', axios.defaults.baseURL || 'Not set (using relative URLs)')
       
       let response
       if (actualFormId) {
@@ -50,6 +52,12 @@ const FormFill = () => {
       setForm(response.data)
     } catch (error) {
       console.error('❌ Error fetching form:', error)
+      console.error('❌ Error details:', {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data
+      })
       setForm(null) // Set form to null to trigger NotFound display
     } finally {
       setLoading(false)
