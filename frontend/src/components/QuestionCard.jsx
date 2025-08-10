@@ -133,7 +133,7 @@ const QuestionCard = ({ question, index, onUpdate, onDelete, onMove }) => {
         {question.image && (
           <div className="mb-4">
             <img
-              src={`http://localhost:8080${question.image}`}
+              src={`https://formbuilder-io.onrender.com${question.image}`}
               alt="Question"
               className="w-full h-32 object-cover rounded-lg"
             />

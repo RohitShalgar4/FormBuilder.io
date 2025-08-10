@@ -110,7 +110,7 @@ const FormEditor = ({ form, setForm }) => {
       {form.headerImage && (
         <div className="mb-6">
           <img
-            src={`http://localhost:8080${form.headerImage}`}
+            src={`https://formbuilder-io.onrender.com${form.headerImage}`}
             alt="Form Header"
             className="w-full h-48 object-cover rounded-lg shadow-sm"
           />
