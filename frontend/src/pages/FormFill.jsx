@@ -8,9 +8,10 @@ import { useAuth } from '../contexts/AuthContext'
 import CategorizeForm from '../components/forms/CategorizeForm'
 import ClozeForm from '../components/forms/ClozeForm'
 import ComprehensionForm from '../components/forms/ComprehensionForm'
+import NotFound from '../components/NotFound'
 
 const FormFill = () => {
-  const { shareId } = useParams()
+  const { shareId, formId, '*': catchAll } = useParams()
   const { user } = useAuth()
   const [form, setForm] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -19,16 +20,37 @@ const FormFill = () => {
   const [answers, setAnswers] = useState({})
   const [errors, setErrors] = useState({})
 
+  // Get the actual formId from various possible sources
+  const actualFormId = formId || (catchAll && catchAll.match(/^[0-9a-fA-F]{24}$/) ? catchAll : null)
+
   useEffect(() => {
     fetchForm()
-  }, [shareId])
+  }, [shareId, actualFormId])
 
   const fetchForm = async () => {
     try {
-      const response = await axios.get(`/api/forms/share/${shareId}`)
+      console.log('🔍 Fetching form with params:', { shareId, formId, actualFormId, catchAll })
+      
+      let response
+      if (actualFormId) {
+        // Fetch by MongoDB ObjectId using public endpoint
+        console.log('📡 Fetching by formId:', actualFormId)
+        response = await axios.get(`/api/forms/public/${actualFormId}`)
+      } else if (shareId) {
+        // Fetch by shareId
+        console.log('📡 Fetching by shareId:', shareId)
+        response = await axios.get(`/api/forms/share/${shareId}`)
+      } else {
+        console.error('❌ No valid form identifier found')
+        setLoading(false)
+        return
+      }
+      
+      console.log('✅ Form fetched successfully:', response.data)
       setForm(response.data)
     } catch (error) {
-      toast.error('Form not found or not published')
+      console.error('❌ Error fetching form:', error)
+      setForm(null) // Set form to null to trigger NotFound display
     } finally {
       setLoading(false)
     }
@@ -167,14 +189,7 @@ const FormFill = () => {
   }
 
   if (!form) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Form not found</h2>
-          <p className="text-gray-600">This form may have been unpublished or deleted.</p>
-        </div>
-      </div>
-    )
+    return <NotFound message="Form not found or not published. Please check the URL and try again." />
   }
 
   if (submitted) {

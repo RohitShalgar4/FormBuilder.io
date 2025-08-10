@@ -54,6 +54,30 @@ router.get('/share/:shareId', async (req, res) => {
   }
 });
 
+// Get form by ID (for public access - no authentication required)
+router.get('/public/:id', async (req, res) => {
+  try {
+    // Validate ObjectId format
+    if (!req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ error: 'Invalid form ID format' });
+    }
+    
+    const form = await Form.findById(req.params.id);
+    if (!form) {
+      return res.status(404).json({ error: 'Form not found' });
+    }
+    
+    if (!form.isPublished) {
+      return res.status(404).json({ error: 'Form not found or not published' });
+    }
+    
+    res.json(form);
+  } catch (error) {
+    console.error('Error fetching form:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Create new form (admin only)
 router.post('/', authenticateToken, requireAdmin, async (req, res) => {
   try {

@@ -18,6 +18,7 @@ import FormPreview from './pages/FormPreview'
 import FormFill from './pages/FormFill'
 import FormResponses from './pages/FormResponses'
 import ResponseDetails from './pages/ResponseDetails'
+import NotFound from './components/NotFound'
 
 function App() {
   return (
@@ -39,6 +40,10 @@ function App() {
                 </ProtectedRoute>
               } />
               <Route path="/form/:shareId" element={<FormFill />} />
+              <Route path="/form/id/:formId" element={<FormFill />} />
+              <Route path="/form/formid/:formId" element={<FormFill />} />
+              {/* Catch-all route for any other form patterns */}
+              <Route path="/form/*" element={<FormFill />} />
 
               {/* Protected routes - Role-based routing */}
               <Route path="/" element={
@@ -80,6 +85,9 @@ function App() {
                   <Admin />
                 </ProtectedRoute>
               } />
+              
+              {/* Catch-all route for 404 */}
+              <Route path="*" element={<NotFound />} />
             </Routes>
           </div>
         </Router>
