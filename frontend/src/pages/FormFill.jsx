@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import { CheckCircle, AlertCircle } from 'lucide-react'
+import { DndProvider } from 'react-dnd'
+import { HTML5Backend } from 'react-dnd-html5-backend'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { useAuth } from '../contexts/AuthContext'
@@ -64,28 +66,72 @@ const FormFill = () => {
     }
   }
 
-  const handleAnswerChange = (questionId, answer) => {
-    setAnswers(prev => ({
-      ...prev,
-      [questionId]: answer
-    }))
+  const handleAnswerChange = useCallback((questionId, answer) => {
+    console.log('📝 Answer changed for question:', questionId, 'Answer:', answer)
+    setAnswers(prev => {
+      if (JSON.stringify(prev[questionId]) === JSON.stringify(answer)) {
+        return prev // No change, prevent update
+      }
+      
+      const newAnswers = {
+        ...prev,
+        [questionId]: answer
+      }
+      console.log('📋 Updated answers state:', newAnswers)
+      return newAnswers
+    })
     
     // Clear error for this question
-    if (errors[questionId]) {
-      setErrors(prev => ({
-        ...prev,
-        [questionId]: null
-      }))
-    }
-  }
+    setErrors(prev => {
+      if (prev[questionId]) {
+        return {
+          ...prev,
+          [questionId]: null
+        }
+      }
+      return prev
+    })
+  }, [])
 
   const validateAnswers = () => {
     const newErrors = {}
     
+    // Safety check for form and questions
+    if (!form || !form.questions) {
+      return false
+    }
+    
     form.questions.forEach(question => {
-      if (question.required && (!answers[question.id] || 
-          (Array.isArray(answers[question.id]) && answers[question.id].length === 0) ||
-          (typeof answers[question.id] === 'object' && Object.keys(answers[question.id]).length === 0))) {
+      // Skip validation for questions without proper data
+      if (!question || !question.id) {
+        return
+      }
+      
+      const answer = answers[question.id]
+      let isEmpty = false
+      
+      // Check different answer types
+      if (!answer) {
+        isEmpty = true
+      } else if (Array.isArray(answer)) {
+        isEmpty = answer.length === 0
+      } else if (typeof answer === 'object') {
+        // For categorize questions, check if any categories have items
+        if (question.type === 'categorize') {
+          isEmpty = Object.keys(answer).length === 0 || 
+                   Object.values(answer).every(items => !items || items.length === 0)
+        } else if (question.type === 'cloze') {
+          // For cloze questions, check if all blanks are filled
+          const textContent = question.settings?.text || ''
+          const blankCount = (textContent.match(/\[(.*?)\]/g) || []).length
+          const filledBlanks = Object.values(answer).filter(val => val && val.trim()).length
+          isEmpty = filledBlanks < blankCount
+        } else {
+          isEmpty = Object.keys(answer).length === 0
+        }
+      }
+      
+      if (question.required && isEmpty) {
         newErrors[question.id] = 'This question is required'
       }
     })
@@ -132,12 +178,21 @@ const FormFill = () => {
     }
   }
 
-  const renderQuestion = (question, index) => {
+  const renderQuestion = useCallback((question, index) => {
     const hasError = errors[question.id]
+    
+    // Safety check for question data
+    if (!question || !question.settings) {
+      return (
+        <div key={question?.id || index} className="bg-white rounded-lg shadow-sm border p-6">
+          <div className="text-gray-500">Question data is loading...</div>
+        </div>
+      )
+    }
     
     const commonProps = {
       question,
-      answer: answers[question.id],
+      answer: answers[question.id] || (question.type === 'categorize' || question.type === 'cloze' ? {} : ''),
       onChange: (answer) => handleAnswerChange(question.id, answer),
       error: hasError
     }
@@ -154,14 +209,14 @@ const FormFill = () => {
         questionComponent = <ComprehensionForm {...commonProps} />
         break
       default:
-        questionComponent = <div className="text-gray-500">Unknown question type</div>
+        questionComponent = <div className="text-gray-500">Unknown question type: {question.type}</div>
     }
 
     return (
       <div key={question.id} className={`bg-white rounded-lg shadow-sm border p-6 ${hasError ? 'border-red-300' : ''}`}>
         <div className="mb-4">
           <h3 className="text-lg font-medium text-gray-900 mb-2">
-            {index + 1}. {question.title}
+            {index + 1}. {question.title || 'Untitled Question'}
             {question.required && <span className="text-red-500 ml-1">*</span>}
           </h3>
           {question.description && (
@@ -172,6 +227,9 @@ const FormFill = () => {
               src={`https://formbuilder-io.onrender.com${question.image}`}
               alt="Question"
               className="w-full h-32 object-cover rounded-lg mb-4"
+              onError={(e) => {
+                e.target.style.display = 'none'
+              }}
             />
           )}
         </div>
@@ -186,7 +244,7 @@ const FormFill = () => {
         )}
       </div>
     )
-  }
+  }, [answers, errors, handleAnswerChange])
 
   if (loading) {
     return (
@@ -213,46 +271,54 @@ const FormFill = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8">
-        <div className="max-w-2xl mx-auto">
-          {/* Header Image */}
-          {form.headerImage && (
-            <div className="mb-6">
-              <img
-                src={`https://formbuilder-io.onrender.com${form.headerImage}`}
-                alt="Form Header"
-                className="w-full h-48 object-cover rounded-lg shadow-sm"
-              />
-            </div>
-          )}
-
-          {/* Form Header */}
-          <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">{form.title}</h1>
-            {form.description && (
-              <p className="text-gray-600">{form.description}</p>
+    <DndProvider backend={HTML5Backend}>
+      <div className="min-h-screen bg-gray-50">
+        <div className="container mx-auto px-4 py-8">
+          <div className="max-w-2xl mx-auto">
+            {/* Header Image */}
+            {form.headerImage && (
+              <div className="mb-6">
+                <img
+                  src={`https://formbuilder-io.onrender.com${form.headerImage}`}
+                  alt="Form Header"
+                  className="w-full h-48 object-cover rounded-lg shadow-sm"
+                />
+              </div>
             )}
-          </div>
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {form.questions.map((question, index) => renderQuestion(question, index))}
-
-            {/* Submit Button */}
-            <div className="bg-white rounded-lg shadow-sm border p-6 text-center">
-              <button
-                type="submit"
-                disabled={submitting}
-                className="btn-primary w-full sm:w-auto px-8 py-3 text-lg"
-              >
-                {submitting ? 'Submitting...' : 'Submit Form'}
-              </button>
+            {/* Form Header */}
+            <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
+              <h1 className="text-2xl font-bold text-gray-900 mb-2">{form.title}</h1>
+              {form.description && (
+                <p className="text-gray-600">{form.description}</p>
+              )}
             </div>
-          </form>
+
+            {/* Form */}
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {form.questions && form.questions.length > 0 ? (
+                form.questions.map((question, index) => renderQuestion(question, index))
+              ) : (
+                <div className="bg-white rounded-lg shadow-sm border p-6 text-center">
+                  <p className="text-gray-500">No questions found in this form.</p>
+                </div>
+              )}
+
+              {/* Submit Button */}
+              <div className="bg-white rounded-lg shadow-sm border p-6 text-center">
+                <button
+                  type="submit"
+                  disabled={submitting || !form.questions || form.questions.length === 0}
+                  className="btn-primary w-full sm:w-auto px-8 py-3 text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {submitting ? 'Submitting...' : 'Submit Form'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       </div>
-    </div>
+    </DndProvider>
   )
 }
 

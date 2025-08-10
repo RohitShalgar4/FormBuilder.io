@@ -42,11 +42,31 @@ function App() {
                   <Register />
                 </ProtectedRoute>
               } />
-              <Route path="/form/:shareId" element={<FormFill />} />
+              <Route path="/form/:shareId" element={
+                <ProtectedRoute requireAuth={true}>
+                  <FormFill />
+                </ProtectedRoute>
+              } />
+              <Route path="/form/id/:formId" element={
+                <ProtectedRoute requireAuth={true}>
+                  <FormFill />
+                </ProtectedRoute>
+              } />
+              <Route path="/form/formid/:formId" element={
+                <ProtectedRoute requireAuth={true}>
+                  <FormFill />
+                </ProtectedRoute>
+              } />
+              <Route path="/form/*" element={
+                <ProtectedRoute requireAuth={true}>
+                  <FormFill />
+                </ProtectedRoute>
+              } />
+              {/* <Route path="/form/:shareId" element={<FormFill />} />
               <Route path="/form/id/:formId" element={<FormFill />} />
-              <Route path="/form/formid/:formId" element={<FormFill />} />
-              {/* Catch-all route for any other form patterns */}
-              <Route path="/form/*" element={<FormFill />} />
+              <Route path="/form/formid/:formId" element={<FormFill />} /> */}
+              {/* Catch-all route for any other form patterns
+              <Route path="/form/*" element={<FormFill />} /> */}
               
               {/* Test route */}
               <Route path="/test/:param?" element={<TestPage />} />
